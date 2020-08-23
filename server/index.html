@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
+    <title>Document</title>
+</head>
+<body>
+    <video autoplay></video>
+
+    <script>
+        const socket = io('http://localhost:8080/');
+        let peer;
+        const viewer = {
+            room: 0,
+            name: 'Milton Herrera'
+        }
+
+        socket.emit('new viewer', viewer);
+
+        socket.on('offer', (broadcaster, sdp) => {
+            peer = new RTCPeerConnection({ 
+                iceServers: [
+                    { urls: "stun:stun.services.mozilla.com" },
+                    { urls: "stun:stun.l.google.com:19302" },
+                ] 
+            });
+            peer.setRemoteDescription(sdp);
+
+            peer.createAnswer()
+                .then(sessionDescription => {
+                    peer.setLocalDescription(sessionDescription);
+
+                    socket.emit('answer', {
+                        type: 'answer',
+                        sdp: sessionDescription,
+                        room: viewer.room
+                    })
+                })
+
+            peer.ontrack = event => {
+                console.log(event.streams[0]);
+                var video = document.querySelector('video');
+                if ('srcObject' in video) {
+                    video.srcObject = event.streams[0];
+                } else {
+                    video.src = window.URL.createObjectURL(stream) // for older browsers
+                }
+            }
+
+            peer.onicecandidate = event => {
+                if (event.candidate) {
+                    socket.emit("candidate", broadcaster.id, {
+                        type: "candidate",
+                        label: event.candidate.sdpMLineIndex,
+                        id: event.candidate.sdpMid,
+                        candidate: event.candidate.candidate,
+                    });
+                }
+            }
+        })
+
+        socket.on("candidate", function (id, event) {
+            const candidate = new RTCIceCandidate({
+                sdpMLineIndex: event.label,
+                candidate: event.candidate,
+            });
+            peer.addIceCandidate(candidate);
+        });
+    </script>
+</body>
+</html>
